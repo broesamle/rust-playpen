@@ -12,7 +12,7 @@ use std::env;
 use std::fmt;
 use std::io::Read;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 use hyper::header;
@@ -73,6 +73,26 @@ fn index(_: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok,
                        Path::new("static/web.html"),
                        Header(XXssProtection(false)))))
+}
+
+fn tenseconds(_: &mut Request) -> IronResult<Response> {
+    let cmdpath = "../mondpaint/target/debug/mondpaint";
+    let mut cmd = Command::new(cmdpath);
+    cmd.stdout(Stdio::piped());
+    let child = cmd.spawn().expect("ls command failed to start");
+    println!("child started.");
+    let childstdout = child.stdout.unwrap();
+
+    let headerchunked =
+        Header(header::TransferEncoding(vec![
+            header::Encoding::Chunked,
+        ]));
+    let bodyreader = iron::response::BodyReader(childstdout);
+    Ok(Response::with((status::Ok,
+                       Header(XXssProtection(false)),
+                       headerchunked,
+                       bodyreader,
+                       )))
 }
 
 /// The JSON-encoded request sent to `evaluate.json`.
@@ -289,6 +309,7 @@ fn main() {
 
     let mut router = Router::new();
     router.get("/", index);
+    router.get("/tenseconds", tenseconds);
     router.get("/:path", Static::new("static"));
     router.post("/evaluate.json", evaluate);
     router.post("/compile.json", compile);
