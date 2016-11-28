@@ -11,11 +11,15 @@ extern crate unicase;
 use std::env;
 use std::fmt;
 use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use hyper::header;
+use hyper::net::{NetworkListener};
 use iron::headers;
 use iron::method::Method;
 use iron::middleware::{BeforeMiddleware, AfterMiddleware};
@@ -73,26 +77,6 @@ fn index(_: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok,
                        Path::new("static/web.html"),
                        Header(XXssProtection(false)))))
-}
-
-fn tenseconds(_: &mut Request) -> IronResult<Response> {
-    let cmdpath = "../mondpaint/target/debug/mondpaint";
-    let mut cmd = Command::new(cmdpath);
-    cmd.stdout(Stdio::piped());
-    let child = cmd.spawn().expect("ls command failed to start");
-    println!("child started.");
-    let childstdout = child.stdout.unwrap();
-
-    let headerchunked =
-        Header(header::TransferEncoding(vec![
-            header::Encoding::Chunked,
-        ]));
-    let bodyreader = iron::response::BodyReader(childstdout);
-    Ok(Response::with((status::Ok,
-                       Header(XXssProtection(false)),
-                       headerchunked,
-                       bodyreader,
-                       )))
 }
 
 /// The JSON-encoded request sent to `evaluate.json`.
@@ -301,6 +285,42 @@ impl BeforeMiddleware for AddCache {
     }
 }
 
+//fn tenseconds(_: &mut Request, stream : &mut hyper::net::HttpStream) -> IronResult<Response> {
+fn tenseconds(stream : hyper::net::HttpStream) {
+    //let cmdpath = "../printerval/target/debug/printerval";
+    //let mut cmd = Command::new(cmdpath);
+    //cmd.stdout(Stdio::piped());
+    //let child = cmd.spawn().expect("ls command failed to start");
+    //println!("child started.");
+    //let childstdout = child.stdout.unwrap();
+
+    let headerchunked =
+        Header(header::TransferEncoding(vec![
+            header::Encoding::Chunked,
+        ]));
+    //let bodyreader = iron::response::BodyReader(childstdout);
+
+    let mut headers = header::Headers::new();
+    headers.set(
+        header::TransferEncoding(vec![
+            header::Encoding::Chunked,
+        ])
+    );
+
+    let mut chunkedwriter = hyper::http::h1::HttpWriter::ChunkedWriter(stream);
+
+    let mut resp = iron::response::HttpResponse::new(&mut chunkedwriter, &mut headers).start().unwrap();
+    //let mut resp = iron::response::HttpResponse::new(20, &mut headers).start().unwrap();
+    resp.write(b"START\n").unwrap();
+    resp.flush().unwrap();
+    for x in 0..100 {
+        thread::sleep(Duration::from_millis(300));
+        resp.write(b"Chunk\n").unwrap();
+        resp.flush().unwrap();
+    }
+
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -309,7 +329,7 @@ fn main() {
 
     let mut router = Router::new();
     router.get("/", index);
-    router.get("/tenseconds", tenseconds);
+    //router.get("/tenseconds", tenseconds);
     router.get("/:path", Static::new("static"));
     router.post("/evaluate.json", evaluate);
     router.post("/compile.json", compile);
@@ -320,10 +340,20 @@ fn main() {
     chain.link_before(AddCache { cache: Arc::new(Cache::new()) });
     chain.link_after(EnablePostCors);
 
-    let addr = env::args().skip(1).next().unwrap_or("127.0.0.1".to_string());
-    let addr = (&addr[..], 8080);
-    println!("listening on {:?}", addr);
-    Iron::new(chain).http(addr).unwrap();
+    //let addr = env::args().skip(1).next().unwrap_or("127.0.0.1".to_string());
+    //let addr = (&addr[..], 8080);
+    //println!("listening on {:?}", addr);
+    //Iron::new(chain).http(addr).unwrap();
+
+
+    let streamaddr = ("127.0.0.1", 50123);
+    let mut streamlistener = hyper::net::HttpListener::new(streamaddr).unwrap();
+    println!("streaming on {:?}", streamaddr);
+
+    for mut stream in streamlistener.accept() {
+        println!("stream{:?}", stream);
+        tenseconds(stream);
+    }
 }
 
 #[test]
