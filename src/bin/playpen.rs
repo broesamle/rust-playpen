@@ -11,11 +11,15 @@ extern crate unicase;
 use std::env;
 use std::fmt;
 use std::io::Read;
+use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use hyper::header;
+use hyper::net::{NetworkListener, HttpStream};
 use iron::headers;
 use iron::method::Method;
 use iron::middleware::{BeforeMiddleware, AfterMiddleware};
@@ -281,6 +285,28 @@ impl BeforeMiddleware for AddCache {
     }
 }
 
+//fn tenseconds(_: &mut Request, stream : &mut hyper::net::HttpStream) -> IronResult<Response> {
+fn tenseconds(mut stream2 : HttpStream) {
+    //let cmdpath = "../printerval/target/debug/printerval";
+    //let mut cmd = Command::new(cmdpath);
+    //cmd.stdout(Stdio::piped());
+    //let child = cmd.spawn().expect("ls command failed to start");
+    //println!("child started.");
+    //let childstdout = child.stdout.unwrap();
+
+    let mut headers = header::Headers::new();
+    //let mut chunkedwriter = hyper::http::h1::HttpWriter::ChunkedWriter(stream);
+    let mut resp = hyper::server::response::Response::new(&mut stream2, &mut headers).start().unwrap();
+    let (_,mut stream2, _, _) = resp.deconstruct();
+    for x in 0..100 {
+         thread::sleep(Duration::from_millis(50));
+         //chunkedwriter.write_fmt(format_args!("Chunk {}", x));
+         stream2.write_fmt(format_args!("Chunk {}\n", x));
+         stream2.flush().unwrap();
+    }
+    stream2.end();
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -298,11 +324,19 @@ fn main() {
     let mut chain = Chain::new(router);
     chain.link_before(AddCache { cache: Arc::new(Cache::new()) });
     chain.link_after(EnablePostCors);
+    // let addr = env::args().skip(1).next().unwrap_or("127.0.0.1".to_string());
+    // let addr = (&addr[..], 8080);
+    // println!("listening on {:?}", addr);
+    // Iron::new(chain).http(addr).unwrap();
 
-    let addr = env::args().skip(1).next().unwrap_or("127.0.0.1".to_string());
-    let addr = (&addr[..], 8080);
-    println!("listening on {:?}", addr);
-    Iron::new(chain).http(addr).unwrap();
+    let streamaddr = ("127.0.0.1", 50123);
+    let mut streamlistener = hyper::net::HttpListener::new(streamaddr).unwrap();
+    println!("streaming on {:?}", streamaddr);
+
+    for mut stream in streamlistener.accept() {
+        println!("stream{:?}", stream);
+        tenseconds(stream);
+    }
 }
 
 #[test]
