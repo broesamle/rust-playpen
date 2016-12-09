@@ -188,6 +188,43 @@
         }, button, test ? "Running tests…" : "Running…", result);
     }
 
+    function paint(result, code, version, optimize, button, test, backtrace) {
+        send("paint.json", {code: code, version: version, optimize: optimize, test: !!test, separate_output: true, color: true, backtrace: backtrace },
+            function(object) {
+                var samp, pre;
+                set_result(result);
+                if (object.rustc) {
+                    samp = document.createElement("samp");
+                    samp.innerHTML = formatCompilerOutput(object.rustc);
+                    pre = document.createElement("pre");
+                    pre.className = "rustc-output " + (("program" in object) ? "rustc-warnings" : "rustc-errors");
+                    pre.appendChild(samp);
+                    result.appendChild(pre);
+                }
+
+                var div = document.createElement("p");
+                div.className = "message";
+                if ("program" in object) {
+                    samp = document.createElement("samp");
+                    samp.className = "output";
+                    samp.innerHTML = formatCompilerOutput(object.program);
+                    pre = document.createElement("pre");
+                    pre.appendChild(samp);
+                    result.appendChild(pre);
+                    if (test) {
+                        div = null;
+                    } else {
+                        div.textContent = "Program ended.";
+                    }
+                } else {
+                    div.textContent = "Compilation failed.";
+                }
+                if (div) {
+                    result.appendChild(div);
+                }
+        }, button, test ? "Running tests…" : "Running…", result);
+    }
+
     function compile(emit, result, code, version, optimize, button, backtrace) {
         var syntax = document.getElementById('asm-flavor').value;
         send("compile.json", {emit: emit, code: code, version: version, optimize: optimize,
@@ -480,6 +517,7 @@
     }
 
     var evaluateButton;
+    var paintButton;
     var asmButton;
     var irButton;
     var mirButton;
@@ -513,16 +551,21 @@
     }
 
     function doEvaluate(skipActionGuessing) {
+        console.log("[BROE] evaluate.");
         var code = session.getValue();
-        if (!skipActionGuessing) {
-            // If we have called this since the last change in the editor,
-            // this would be a waste of time
-            updateEvaluateAction(code);
-        }
+        var evaluateAction = "paint";
         evaluate(result, session.getValue(), getRadioValue("version"),
                  getRadioValue("optimize"), evaluateButton,
                  evaluateAction === "test",
                  backtrace.value);
+    }
+
+    function doPaint() {
+        var code = session.getValue();
+        paint(result, code, getRadioValue("version"),
+              getRadioValue("optimize"), paintButton,
+              evaluateAction === "test",
+              backtrace.value);
     }
 
     var COLOR_CODES = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
@@ -554,7 +597,7 @@
 
     //This affects how mouse acts on the program output.
     //Screenshots here: https://github.com/rust-lang/rust-playpen/pull/192#issue-145465630
-    //If mouse hovers on eg. "<anon>:3", temporarily show that line(3) into view by 
+    //If mouse hovers on eg. "<anon>:3", temporarily show that line(3) into view by
     //selecting it entirely and move editor's cursor to the beginning of it;
     //Moves back to original view when mouse moved away.
     //If mouse left click on eg. "<anon>:3" then the editor's cursor is moved
@@ -597,6 +640,7 @@
 
     addEventListener("DOMContentLoaded", function() {
         evaluateButton = document.getElementById("evaluate");
+        paintButton = document.getElementById("paint");
         asmButton = document.getElementById("asm");
         irButton = document.getElementById("llvm-ir");
         mirButton = document.getElementById("mir");
@@ -728,6 +772,10 @@
             editor.focus();
         };
 
+        paintButton.onclick = function() {
+            doPaint();
+            editor.focus();
+        };
         editor.commands.addCommand({
             name: "evaluate",
             exec: evaluateButton.onclick,

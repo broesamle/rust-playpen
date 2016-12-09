@@ -150,6 +150,67 @@ fn evaluate(req: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok, format!("{}", json::Json::Object(obj)))))
 }
 
+fn paint(req: &mut Request) -> IronResult<Response> {
+    let mut body = String::new();
+    itry!(req.body.read_to_string(&mut body));
+
+    let data: EvaluateReq = itry!(json::decode(&body));
+    let color = data.color.unwrap_or(false);
+    let test = data.test.unwrap_or(false);
+    let version = itry!(data.version.map(|v| v.parse()).unwrap_or(Ok(ReleaseChannel::Stable)));
+    let opt = itry!(data.optimize.map(|opt| opt.parse()).unwrap_or(Ok(OptLevel::O2)));
+    let separate_output = data.separate_output.unwrap_or(false);
+    let backtrace = itry!(data.backtrace.map(|b| b.parse()).unwrap_or(Ok(Backtrace::Auto)));
+
+    let mut args = vec![String::from("-C"), format!("opt-level={}", opt.as_u8())];
+    if opt == OptLevel::O0 {
+        args.push(String::from("-g"));
+    }
+    if color {
+        args.push(String::from("--color=always"));
+    }
+    if test {
+        args.push(String::from("--test"));
+    }
+
+    let mut env = base_env();
+    if backtrace.is_requested(opt == OptLevel::O0) {
+        env.push(("RUST_BACKTRACE".into(), "1".into()));
+    }
+
+    let cache = req.extensions.get::<AddCache>().unwrap();
+    println!("Soon I will let this code paint: {:?}", data.code);
+    let (_status, output) = itry!(cache.exec(version,
+                                             "/usr/local/bin/evaluate.sh",
+                                             args,
+                                             env,
+                                             data.code));
+
+    let mut obj = json::Object::new();
+    if separate_output {
+        // {"rustc": "...", "program": "..."}
+        let mut split = output.splitn(2, |b| *b == b'\xff');
+        let rustc = String::from_utf8(split.next().unwrap().into()).unwrap();
+
+        obj.insert(String::from("rustc"), json::Json::String(rustc));
+
+        if let Some(program) = split.next() {
+            // Compilation succeeded
+            let output = String::from_utf8_lossy(program).into_owned();
+            obj.insert(String::from("program"), json::Json::String(format!("Soon I will be able to paint!\n{}", output)));
+        }
+    } else {
+        // {"result": "...""}
+        let result = output.splitn(2, |b| *b == b'\xff')
+                           .map(|sub| String::from_utf8_lossy(sub).into_owned())
+                           .collect::<String>();
+
+        obj.insert(String::from("result"), json::Json::String(result));
+    }
+
+    Ok(Response::with((status::Ok, format!("{}", json::Json::Object(obj)))))
+}
+
 #[derive(RustcDecodable)]
 struct CompileReq {
     syntax: Option<String>,
@@ -323,6 +384,7 @@ fn main() {
     router.get("/", index);
     router.get("/:path", Static::new("static"));
     router.post("/evaluate.json", evaluate);
+    router.post("/paint.json", paint);
     router.post("/compile.json", compile);
     router.post("/format.json", format);
 
