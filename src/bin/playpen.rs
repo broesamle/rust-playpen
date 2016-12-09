@@ -301,6 +301,19 @@ fn testMondStream(mut stream : HttpStream) {
 }
 
 fn main() {
+    let streamaddr = ("127.0.0.1", 50123);
+    let mut streamlistener = hyper::net::HttpListener::new(streamaddr).unwrap();
+    let painterthread = thread::spawn(move || {
+        println!("streaming on {:?}", streamaddr);
+        let mut done = false;
+        while !done {
+            for mut stream in streamlistener.accept() {
+                println!("stream{:?}", stream);
+                testMondStream(stream);
+            }
+        }
+    });
+
     env_logger::init().unwrap();
 
     // Make sure pygmentize is installed before starting the server
@@ -317,22 +330,10 @@ fn main() {
     let mut chain = Chain::new(router);
     chain.link_before(AddCache { cache: Arc::new(Cache::new()) });
     chain.link_after(EnablePostCors);
-    // let addr = env::args().skip(1).next().unwrap_or("127.0.0.1".to_string());
-    // let addr = (&addr[..], 8080);
-    // println!("listening on {:?}", addr);
-    // Iron::new(chain).http(addr).unwrap();
-
-    let streamaddr = ("127.0.0.1", 50123);
-    let mut streamlistener = hyper::net::HttpListener::new(streamaddr).unwrap();
-    println!("streaming on {:?}", streamaddr);
-
-    let mut done = false;
-    while !done {
-        for mut stream in streamlistener.accept() {
-            println!("stream{:?}", stream);
-            testMondStream(stream);
-        }
-    }
+    let addr = env::args().skip(1).next().unwrap_or("127.0.0.1".to_string());
+    let addr = (&addr[..], 8080);
+    println!("listening on {:?}", addr);
+    Iron::new(chain).http(addr).unwrap();
 }
 
 #[test]
