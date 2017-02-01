@@ -189,40 +189,16 @@
     }
 
     function paint(result, code, version, optimize, button, test, backtrace) {
-        send("paint.json", {code: code, version: version, optimize: optimize, test: !!test, separate_output: true, color: true, backtrace: backtrace },
-            function(object) {
-                var samp, pre;
-                set_result(result);
-                if (object.rustc) {
-                    samp = document.createElement("samp");
-                    samp.innerHTML = formatCompilerOutput(object.rustc);
-                    pre = document.createElement("pre");
-                    pre.className = "rustc-output " + (("program" in object) ? "rustc-warnings" : "rustc-errors");
-                    pre.appendChild(samp);
-                    result.appendChild(pre);
-                }
-
-                var div = document.createElement("p");
-                div.className = "message";
-                if ("program" in object) {
-                    samp = document.createElement("samp");
-                    samp.className = "output";
-                    samp.innerHTML = formatCompilerOutput(object.program);
-                    pre = document.createElement("pre");
-                    pre.appendChild(samp);
-                    result.appendChild(pre);
-                    if (test) {
-                        div = null;
-                    } else {
-                        div.textContent = "Program ended.";
-                    }
-                } else {
-                    div.textContent = "Compilation failed.";
-                }
-                if (div) {
-                    result.appendChild(div);
-                }
-        }, button, test ? "Running tests…" : "Running…", result);
+        console.log("PAINT:", code);
+        //var data = {code: code, version: version, optimize: optimize, test: !!test, separate_output: true, color: true, backtrace: backtrace };
+        var request = new XMLHttpRequest();
+        request.open("GET", "http://127.0.0.1:50123/tenseconds");
+        request.onprogress = function () {
+            console.log("PROGRESS:", request.responseText)
+        }
+        console.log("open.");
+        request.send();
+        console.log("sent.");
     }
 
     function compile(emit, result, code, version, optimize, button, backtrace) {

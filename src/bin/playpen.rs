@@ -354,11 +354,19 @@ fn testMondStream(mut stream : HttpStream) {
     let mut childstdout = child.stdout.unwrap();
 
     let mut headers = header::Headers::new();
-    let mut resp = hyper::server::response::Response::new(&mut stream, &mut headers).start().unwrap();
-    let (_,mut stream2, _, _) = resp.deconstruct();
 
-    copy(&mut childstdout, &mut stream2);
-    stream2.end();
+    //copy(&mut childstdout, &mut stream2);
+    thread::sleep(Duration::from_millis(200));
+    stream.write(b"TEST\n");
+    thread::sleep(Duration::from_millis(200));
+    stream.write(b"TEST\n");
+    thread::sleep(Duration::from_millis(200));
+    stream.write(b"TEST\n");
+    thread::sleep(Duration::from_millis(200));
+    stream.write(b"TEST\n");
+    thread::sleep(Duration::from_millis(200));
+    stream.write(b"TEST\n");
+    //stream.end();
 }
 
 fn main() {
